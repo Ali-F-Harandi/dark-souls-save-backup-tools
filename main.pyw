@@ -6,9 +6,9 @@ import datetime
 import ctypes
 import ctypes.wintypes
 
-from PyQt5 import uic, QtWidgets
-from PyQt5.QtWidgets import QPushButton, QWidget, QApplication, QFileDialog, QMessageBox
-from PyQt5.QtCore import Qt
+from PyQt5 import uic
+from PyQt5.QtWidgets import QWidget, QApplication, QFileDialog
+from PyQt5.QtCore import QAbstractNativeEventFilter
 
 import constant
 
@@ -53,7 +53,7 @@ BACKUP_DIR_NAME = 'backups'
 # ===========================================================================
 #  Native-event filter — catches WM_HOTKEY without pynput
 # ===========================================================================
-class HotkeyFilter(QtWidgets.QAbstractNativeEventFilter):
+class HotkeyFilter(QAbstractNativeEventFilter):
     """
     Intercepts WM_HOTKEY messages from the Windows message loop.
     Because we use RegisterHotKey (not SetWindowsHookEx), this will NOT

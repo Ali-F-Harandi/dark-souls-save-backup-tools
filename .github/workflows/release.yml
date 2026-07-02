@@ -35,6 +35,25 @@ jobs:
           --add-data "Dark_Souls_Logo.jpg;."
           --add-data "save_Backup_Careated.wav;."
           --add-data "save_Backup_Loaded.wav;."
+          --exclude-module QtNetwork
+          --exclude-module QtOpenGL
+          --exclude-module QtSql
+          --exclude-module QtXml
+          --exclude-module QtXmlPatterns
+          --exclude-module QtBluetooth
+          --exclude-module QtPositioning
+          --exclude-module QtMultimedia
+          --exclude-module QtQuick
+          --exclude-module QtQml
+          --exclude-module QtSensors
+          --exclude-module QtSerialPort
+          --exclude-module QtWebEngine
+          --exclude-module QtWebSockets
+          --exclude-module QtTest
+          --exclude-module _tkinter
+          --exclude-module unittest
+          --exclude-module pydoc
+          --exclude-module distutils
           main.pyw
 
       - name: Extract version from tag
