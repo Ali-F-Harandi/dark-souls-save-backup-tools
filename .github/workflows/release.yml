@@ -34,7 +34,6 @@ jobs:
           --add-data "Dark_Souls_Logo.jpg;."
           --add-data "save_Backup_Careated.wav;."
           --add-data "save_Backup_Loaded.wav;."
-          --exclude-module _tkinter
           --exclude-module unittest
           --exclude-module pydoc
           --exclude-module distutils
