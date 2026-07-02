@@ -13,19 +13,19 @@
     <x>0</x>
     <y>0</y>
     <width>340</width>
-    <height>309</height>
+    <height>340</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>340</width>
-    <height>309</height>
+    <height>340</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>340</width>
-    <height>390</height>
+    <height>420</height>
    </size>
   </property>
   <property name="windowTitle">
@@ -42,13 +42,10 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>220</y>
+     <y>250</y>
      <width>321</width>
      <height>21</height>
     </rect>
-   </property>
-   <property name="text">
-    <string>C:\Users\alifh\OneDrive\Desktop\py gui</string>
    </property>
    <property name="readOnly">
     <bool>true</bool>
@@ -58,7 +55,7 @@
    <property name="geometry">
     <rect>
      <x>260</x>
-     <y>190</y>
+     <y>220</y>
      <width>71</width>
      <height>21</height>
     </rect>
@@ -71,7 +68,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>190</y>
+     <y>220</y>
      <width>181</width>
      <height>21</height>
     </rect>
@@ -90,7 +87,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>250</y>
+     <y>280</y>
      <width>161</width>
      <height>41</height>
     </rect>
@@ -103,7 +100,7 @@
    <property name="geometry">
     <rect>
      <x>180</x>
-     <y>250</y>
+     <y>280</y>
      <width>151</width>
      <height>41</height>
     </rect>
@@ -122,14 +119,14 @@
     </rect>
    </property>
    <property name="text">
-    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;img src=&quot;C:/Users/alifh/OneDrive/Desktop/py gui/Dark_Souls_Logo.jpg&quot; width=&quot;341&quot; height=&quot;151&quot;/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+    <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;img src=&quot;Dark_Souls_Logo.jpg&quot; width=&quot;341&quot; height=&quot;151&quot;/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
    </property>
   </widget>
   <widget class="QComboBox" name="comboBox">
    <property name="geometry">
     <rect>
      <x>190</x>
-     <y>165</y>
+     <y>190</y>
      <width>141</width>
      <height>21</height>
     </rect>
@@ -149,12 +146,17 @@
      <string>Dark Souls III</string>
     </property>
    </item>
+   <item>
+    <property name="text">
+     <string>Elden Ring</string>
+    </property>
+   </item>
   </widget>
   <widget class="QLabel" name="label_2">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>160</y>
+     <y>190</y>
      <width>181</width>
      <height>21</height>
     </rect>
@@ -173,7 +175,7 @@
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>290</y>
+     <y>325</y>
      <width>331</width>
      <height>20</height>
     </rect>

@@ -1,0 +1,66 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build .exe with PyInstaller
+        run: >
+          pyinstaller
+          --onefile
+          --windowed
+          --name "DarkSoulsSaveBackup"
+          --icon "Dark_sign.ico"
+          --add-data "main.ui;."
+          --add-data "Dark_Souls_Logo.jpg;."
+          --add-data "save_Backup_Careated.wav;."
+          --add-data "save_Backup_Loaded.wav;."
+          main.pyw
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: ${{ steps.version.outputs.TAG }}
+          body: |
+            ## Dark Souls Save Backup Tools ${{ steps.version.outputs.TAG }}
+
+            ### Features
+            - Support for Dark Souls: Remastered, Dark Souls II, Dark Souls III & Elden Ring
+            - Global hotkeys: **F1** to backup / **F2** to restore (works in-game, no alt-tab)
+            - Timestamped backups (up to 10 per game)
+            - Sound feedback on backup/restore
+            - No antivirus false positives (uses Windows RegisterHotKey API)
+
+            ### How to use
+            1. Run `DarkSoulsSaveBackup.exe`
+            2. Select your game from the dropdown
+            3. Press **F1** to create a backup / **F2** to restore the latest backup
+          files: dist/DarkSoulsSaveBackup.exe
+          draft: false
+          prerelease: false
