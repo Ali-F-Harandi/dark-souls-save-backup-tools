@@ -5,19 +5,17 @@ import winsound
 import datetime
 import ctypes
 import ctypes.wintypes
+import threading
 
-from PyQt5 import uic
-from PyQt5.QtWidgets import QWidget, QApplication, QFileDialog
-from PyQt5.QtCore import QAbstractNativeEventFilter
+from tkinter import Tk, Label, Button, StringVar, Frame, filedialog, ttk
+from PIL import Image, ImageTk
 
 import constant
 
 # ---------------------------------------------------------------------------
 # Base directory — works both in dev mode and inside a PyInstaller bundle.
-# PyInstaller --onefile extracts resources to sys._MEIPASS at runtime.
 # ---------------------------------------------------------------------------
 def _get_base_dir():
-    """Return the directory that contains bundled resources (ui, sounds, images)."""
     if getattr(sys, 'frozen', False):
         return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
@@ -25,10 +23,7 @@ def _get_base_dir():
 BASE_DIR = _get_base_dir()
 
 # ---------------------------------------------------------------------------
-# Windows API constants & handle  (used for global hotkeys)
-# RegisterHotKey is the OFFICIAL Windows API for apps that need hotkeys.
-# Antivirus whitelists it because it does NOT hook keyboard input
-# (unlike SetWindowsHookEx which pynput uses — that's what triggers detection).
+# Windows API — global hotkeys via RegisterHotKey (no pynput, no antivirus)
 # ---------------------------------------------------------------------------
 MOD_NOREPEAT = 0x4000
 WM_HOTKEY    = 0x0312
@@ -40,48 +35,50 @@ HOTKEY_LOAD  = 2
 user32 = ctypes.windll.user32
 
 # ---------------------------------------------------------------------------
-# Global selected-save state
+# Global state
 # ---------------------------------------------------------------------------
 selectedSaveFile = {
     'path': os.path.join(os.environ['USERPROFILE'], constant.DARK_SOULS_I_DEFAULT_SAVE_PATH),
     'name': constant.DARK_SOULS_I_SAVE_FILE_NAME,
 }
-
 BACKUP_DIR_NAME = 'backups'
 
+# Colors (Dark Souls theme)
+BG_COLOR     = "#1a1a1a"
+BG_DARK      = "#111111"
+FG_COLOR     = "#c8a45c"
+FG_DIM       = "#888888"
+BTN_BG       = "#2a2a2a"
+BTN_ACTIVE   = "#3a3a3a"
+GREEN        = "#00aa00"
+RED          = "#ff0000"
+
 
 # ===========================================================================
-#  Native-event filter — catches WM_HOTKEY without pynput
+#  Hotkey thread — runs its own message loop in the background
 # ===========================================================================
-class HotkeyFilter(QAbstractNativeEventFilter):
+def _hotkey_thread(root, app):
     """
-    Intercepts WM_HOTKEY messages from the Windows message loop.
-    Because we use RegisterHotKey (not SetWindowsHookEx), this will NOT
-    be flagged by Windows Defender or any other antivirus.
+    Register hotkeys in THIS thread's message queue, then pump messages.
+    When WM_HOTKEY arrives, schedule the action on the tkinter main thread
+    via root.after() (thread-safe).
     """
+    user32.RegisterHotKey(None, HOTKEY_SAVE, MOD_NOREPEAT, VK_F1)
+    user32.RegisterHotKey(None, HOTKEY_LOAD, MOD_NOREPEAT, VK_F2)
 
-    def __init__(self, app_window):
-        super().__init__()
-        self.app_window = app_window
-
-    def nativeEventFilter(self, eventType, message):
-        if eventType == "windows_generic_MSG":
-            msg = ctypes.wintypes.MSG.from_address(int(message))
-            if msg.message == WM_HOTKEY:
-                if msg.wParam == HOTKEY_SAVE:
-                    self.app_window.createSaveBackup(from_hotkey=True)
-                elif msg.wParam == HOTKEY_LOAD:
-                    self.app_window.loadSaveBackup(from_hotkey=True)
-                return True, 0
-        return False, 0
+    msg = ctypes.wintypes.MSG()
+    while user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
+        if msg.message == WM_HOTKEY:
+            if msg.wParam == HOTKEY_SAVE:
+                root.after(0, app.createSaveBackup)
+            elif msg.wParam == HOTKEY_LOAD:
+                root.after(0, app.loadSaveBackup)
 
 
 # ===========================================================================
-#  Main application window
+#  Main application
 # ===========================================================================
-class AppDemo(QWidget):
-
-    # Game list: (display_name, relative_path_key, save_file_name)
+class App:
     GAMES = [
         ("Dark Souls: Remastered", constant.DARK_SOULS_I_DEFAULT_SAVE_PATH,   constant.DARK_SOULS_I_SAVE_FILE_NAME),
         ("Dark Souls II",         constant.DARK_SOULS_II_DEFAULT_SAVE_PATH,  constant.DARK_SOULS_II_SAVE_FILE_NAME),
@@ -89,66 +86,127 @@ class AppDemo(QWidget):
         ("Elden Ring",            constant.ELDEN_RING_DEFAULT_SAVE_PATH,     constant.ELDEN_RING_SAVE_FILE_NAME),
     ]
 
-    # ------------------------------------------------------------------
-    def __init__(self):
-        super().__init__()
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Dark Souls Save Backup Tools")
+        self.root.configure(bg=BG_COLOR)
+        self.root.resizable(False, False)
 
-        # Load UI from the SAME directory as the script (portable!)
-        ui_path = os.path.join(BASE_DIR, "main.ui")
-        uic.loadUi(ui_path, self)
+        # Window icon
+        ico_path = os.path.join(BASE_DIR, "Dark_sign.ico")
+        if os.path.isfile(ico_path):
+            self.root.iconbitmap(ico_path)
 
-        # Build a lookup of index -> full default save path
+        # --- Build default save paths per game ---
         self.savePaths = {}
         for i, (_, rel_path, _) in enumerate(self.GAMES):
             self.savePaths[i] = os.path.join(os.environ["USERPROFILE"], rel_path)
 
-        # Wire up signals
-        self.comboBox.currentIndexChanged.connect(self.selectGame)
-        self.selectSaveFolderButton.clicked.connect(self.selectPath)
-        self.saveButton.clicked.connect(lambda: self.createSaveBackup(from_hotkey=False))
-        self.loadButton.clicked.connect(lambda: self.loadSaveBackup(from_hotkey=False))
+        # --- GUI variables ---
+        self.game_var = StringVar(value=self.GAMES[0][0])
+        self.path_var = StringVar(value=selectedSaveFile["path"])
+        self.status_var = StringVar(value="")
 
-        # Show the default path
-        self.SaveFolderPath.setText(selectedSaveFile["path"])
+        self._build_ui()
+        self.game_var.trace_add("write", lambda *_: self._on_game_change())
+
+    # ------------------------------------------------------------------
+    #  Build UI
+    # ------------------------------------------------------------------
+    def _build_ui(self):
+        W = 340
+        # ---- Logo ----
+        logo_path = os.path.join(BASE_DIR, "Dark_Souls_Logo.jpg")
+        if os.path.isfile(logo_path):
+            img = Image.open(logo_path)
+            img = img.resize((W, 151), Image.LANCZOS)
+            self._logo_tk = ImageTk.PhotoImage(img)
+            Label(self.root, image=self._logo_tk, bg=BG_COLOR).pack(padx=0, pady=0)
+
+        # ---- Game selector row ----
+        row1 = Frame(self.root, bg=BG_COLOR)
+        row1.pack(fill="x", padx=10, pady=(10, 0))
+        Label(row1, text="Select Your Game :", font=("Segoe UI", 9, "bold"),
+              bg=BG_COLOR, fg=FG_COLOR).pack(side="left")
+        combo = ttk.Combobox(row1, textvariable=self.game_var,
+                             values=[g[0] for g in self.GAMES],
+                             state="readonly", width=20)
+        combo.pack(side="right")
+        combo.current(0)
+
+        # ---- Save folder path row ----
+        row2 = Frame(self.root, bg=BG_COLOR)
+        row2.pack(fill="x", padx=10, pady=(10, 0))
+        Label(row2, text="Save Folder Path :", font=("Segoe UI", 9, "bold"),
+              bg=BG_COLOR, fg=FG_COLOR).pack(side="left")
+        Button(row2, text="Select Folder", font=("Segoe UI", 8),
+               bg=BTN_BG, fg=FG_COLOR, activebackground=BTN_ACTIVE,
+               relief="flat", cursor="hand2",
+               command=self._select_path).pack(side="right")
+
+        # ---- Path display ----
+        path_entry = Frame(self.root, bg=BG_DARK, bd=1, relief="sunken")
+        path_entry.pack(fill="x", padx=10, pady=(4, 0))
+        Label(path_entry, textvariable=self.path_var, font=("Consolas", 8),
+              bg=BG_DARK, fg=FG_DIM, anchor="w").pack(fill="x", padx=4, pady=2)
+
+        # ---- Buttons ----
+        btn_row = Frame(self.root, bg=BG_COLOR)
+        btn_row.pack(fill="x", padx=10, pady=(15, 0))
+
+        btn_style = dict(font=("Segoe UI", 10, "bold"), width=14, height=2,
+                         bg=BTN_BG, fg=FG_COLOR, activebackground=BTN_ACTIVE,
+                         activeforeground=FG_COLOR, relief="flat", cursor="hand2")
+
+        Button(btn_row, text="Save  (F1)", command=self.createSaveBackup,
+               **btn_style).pack(side="left", padx=(0, 5))
+        Button(btn_row, text="Load  (F2)", command=self.loadSaveBackup,
+               **btn_style).pack(side="right", padx=(5, 0))
+
+        # ---- Status bar ----
+        self.status_label = Label(self.root, textvariable=self.status_var,
+                                  font=("Segoe UI", 9), bg=BG_COLOR, fg=GREEN,
+                                  anchor="w")
+        self.status_label.pack(fill="x", padx=10, pady=(10, 8))
 
     # ------------------------------------------------------------------
     #  Game / path selection
     # ------------------------------------------------------------------
-    def selectGame(self):
-        index = self.comboBox.currentIndex()
-        if 0 <= index < len(self.GAMES):
-            _, _, filename = self.GAMES[index]
-            path = self.savePaths.get(index, self.savePaths[0])
-            self._updateSelectedSaveFile(path, filename)
-            self.SaveFolderPath.setText(selectedSaveFile["path"])
+    def _on_game_change(self):
+        name = self.game_var.get()
+        for i, (gname, _, filename) in enumerate(self.GAMES):
+            if gname == name:
+                path = self.savePaths.get(i, self.savePaths[0])
+                self._update_selected(path, filename)
+                self.path_var.set(selectedSaveFile["path"])
+                break
 
-    def selectPath(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Directory")
+    def _select_path(self):
+        directory = filedialog.askdirectory(title="Select Directory")
         if not directory:
             return
+        self.path_var.set(directory)
 
-        self.SaveFolderPath.setText(directory)
-        index = self.comboBox.currentIndex()
-
-        if 0 <= index < len(self.GAMES):
-            _, _, filename = self.GAMES[index]
-            self.savePaths[index] = directory
-            self._updateSelectedSaveFile(directory, filename)
+        name = self.game_var.get()
+        for i, (gname, _, filename) in enumerate(self.GAMES):
+            if gname == name:
+                self.savePaths[i] = directory
+                self._update_selected(directory, filename)
+                break
 
     @staticmethod
-    def _updateSelectedSaveFile(path, name):
+    def _update_selected(path, name):
         selectedSaveFile["path"] = path
         selectedSaveFile["name"] = name
 
     # ------------------------------------------------------------------
     #  Backup helpers
     # ------------------------------------------------------------------
-    def _backupDir(self):
+    def _backup_dir(self):
         return os.path.join(selectedSaveFile["path"], BACKUP_DIR_NAME)
 
-    def _latestBackupPath(self):
-        """Return the full path of the most recent backup, or None."""
-        bdir = self._backupDir()
+    def _latest_backup(self):
+        bdir = self._backup_dir()
         if not os.path.isdir(bdir):
             return None
         backups = sorted(
@@ -157,40 +215,31 @@ class AppDemo(QWidget):
         )
         return os.path.join(bdir, backups[0]) if backups else None
 
-    def _playSound(self, filename):
-        """Play a .wav sound if the file exists next to the script."""
+    def _play_sound(self, filename):
         path = os.path.join(BASE_DIR, filename)
         if os.path.isfile(path):
             winsound.PlaySound(path, winsound.SND_FILENAME)
 
-    def _setStatus(self, text, success=True):
-        color = "#00aa00" if success else "#ff0000"
-        self.labelStatus.setText(
-            f'<html><head/><body><p>Status: '
-            f'<span style="color:{color};">{text}</span>'
-            f'</p></body></html>'
-        )
+    def _set_status(self, text, success=True):
+        self.status_label.configure(fg=GREEN if success else RED)
+        self.status_var.set(f"Status: {text}")
 
     # ------------------------------------------------------------------
     #  Core: Create / Load backup
     # ------------------------------------------------------------------
-    def createSaveBackup(self, from_hotkey=False):
+    def createSaveBackup(self):
         try:
             source = os.path.join(selectedSaveFile["path"], selectedSaveFile["name"])
-
             if not os.path.isfile(source):
-                self._setStatus(f'Save file not found ({selectedSaveFile["name"]})', success=False)
+                self._set_status(f'Save file not found ({selectedSaveFile["name"]})', False)
                 return
 
-            # Create backup directory if needed
-            bdir = self._backupDir()
+            bdir = self._backup_dir()
             os.makedirs(bdir, exist_ok=True)
 
-            # Timestamped filename: backup_2024-01-15_14-30-00_DRAKS0005.sl2
             ts = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             backup_name = f"backup_{ts}_{selectedSaveFile['name']}"
             dest = os.path.join(bdir, backup_name)
-
             shutil.copy2(source, dest)
 
             # Remove oldest backups when we exceed the limit
@@ -202,27 +251,27 @@ class AppDemo(QWidget):
                 os.remove(os.path.join(bdir, old))
 
             count = min(len(all_backups), constant.MAX_BACKUPS)
-            self._setStatus(f"Save backup created. ({count}/{constant.MAX_BACKUPS})")
-            self._playSound("save_Backup_Careated.wav")
+            self._set_status(f"Save backup created. ({count}/{constant.MAX_BACKUPS})")
+            self._play_sound("save_Backup_Careated.wav")
 
         except Exception as e:
-            self._setStatus(f"Error: {e}", success=False)
+            self._set_status(f"Error: {e}", False)
 
-    def loadSaveBackup(self, from_hotkey=False):
+    def loadSaveBackup(self):
         try:
-            latest = self._latestBackupPath()
+            latest = self._latest_backup()
             if latest is None:
-                self._setStatus("No backup found to load.", success=False)
+                self._set_status("No backup found to load.", False)
                 return
 
             dest = os.path.join(selectedSaveFile["path"], selectedSaveFile["name"])
             shutil.copy2(latest, dest)
 
-            self._setStatus(f"Backup loaded. ({os.path.basename(latest)})")
-            self._playSound("save_Backup_Loaded.wav")
+            self._set_status(f"Backup loaded. ({os.path.basename(latest)})")
+            self._play_sound("save_Backup_Loaded.wav")
 
         except Exception as e:
-            self._setStatus(f"Error: {e}", success=False)
+            self._set_status(f"Error: {e}", False)
 
 
 # ===========================================================================
@@ -230,24 +279,15 @@ class AppDemo(QWidget):
 # ===========================================================================
 if __name__ == "__main__":
 
-    app = QApplication(sys.argv)
+    root = Tk()
+    app = App(root)
 
-    demo = AppDemo()
-    demo.show()
+    # Start hotkey listener in a background thread
+    t = threading.Thread(target=_hotkey_thread, args=(root, app), daemon=True)
+    t.start()
 
-    # --- Register global hotkeys via Windows API (NOT pynput!) ---
-    hotkey_filter = HotkeyFilter(demo)
-    app.installNativeEventFilter(hotkey_filter)
+    root.mainloop()
 
-    if not user32.RegisterHotKey(None, HOTKEY_SAVE, MOD_NOREPEAT, VK_F1):
-        print("Warning: Could not register F1 hotkey (may already be in use).")
-    if not user32.RegisterHotKey(None, HOTKEY_LOAD, MOD_NOREPEAT, VK_F2):
-        print("Warning: Could not register F2 hotkey (may already be in use).")
-
-    exit_code = app.exec()
-
-    # Clean up hotkey registrations before exit
+    # Cleanup
     user32.UnregisterHotKey(None, HOTKEY_SAVE)
     user32.UnregisterHotKey(None, HOTKEY_LOAD)
-
-    sys.exit(exit_code)

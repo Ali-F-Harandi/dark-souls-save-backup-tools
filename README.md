@@ -58,7 +58,7 @@ git push origin v2.0.0
 ## Tech Stack
 
 - Python 3.11+
-- PyQt5
+- tkinter + Pillow (lightweight GUI — no Qt dependency)
 - PyInstaller (for `.exe` builds)
 - Windows API (`RegisterHotKey` / `WM_HOTKEY`) — no `pynput`
 

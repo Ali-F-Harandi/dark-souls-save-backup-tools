@@ -31,29 +31,20 @@ jobs:
           --windowed
           --name "DarkSoulsSaveBackup"
           --icon "Dark_sign.ico"
-          --add-data "main.ui;."
           --add-data "Dark_Souls_Logo.jpg;."
           --add-data "save_Backup_Careated.wav;."
           --add-data "save_Backup_Loaded.wav;."
-          --exclude-module QtNetwork
-          --exclude-module QtOpenGL
-          --exclude-module QtSql
-          --exclude-module QtXml
-          --exclude-module QtXmlPatterns
-          --exclude-module QtBluetooth
-          --exclude-module QtPositioning
-          --exclude-module QtMultimedia
-          --exclude-module QtQuick
-          --exclude-module QtQml
-          --exclude-module QtSensors
-          --exclude-module QtSerialPort
-          --exclude-module QtWebEngine
-          --exclude-module QtWebSockets
-          --exclude-module QtTest
           --exclude-module _tkinter
           --exclude-module unittest
           --exclude-module pydoc
           --exclude-module distutils
+          --exclude-module doctest
+          --exclude-module email
+          --exclude-module html
+          --exclude-module http
+          --exclude-module xml
+          --exclude-module py_compile
+          --exclude-module lib2to3
           main.pyw
 
       - name: Extract version from tag
